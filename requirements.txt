@@ -1,0 +1,7 @@
+pydantic
+sqlalchemy
+pycountrycode
+fastapi
+sqlite3
+uvicorn
+pydantic-extra-types
