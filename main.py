@@ -41,6 +41,8 @@ def cadastrar_ciclista(
         return novo_ciclista
     except ValidationError:
         raise HTTPException(status_code=422, detail="Parâmetros incorretos.")
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 @app.get("/ciclista/{idCiclista}", status_code=200, response_model=Ciclista, tags=["Aluguel"])
 def recupera_ciclista(
@@ -152,17 +154,11 @@ def delete_funcionario(idFuncionario: int, db: Session = Depends(get_db)):
 @app.post("/aluguel", status_code=200, response_model=Aluguel, tags=["Aluguel"])
 def realizar_aluguel(ciclista: int = Body(...), trancaInicio: int = Body(...), db: Session = Depends(get_db)):
     ciclista_service = CiclistaService(db)
-    try:
-        resultado = ciclista_service.realizar_aluguel(ciclista, trancaInicio)
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    if not resultado:
-        raise HTTPException(status_code=404, detail="Ciclista não encontrado.")
+    resultado = ciclista_service.realizar_aluguel(ciclista, trancaInicio)
     return resultado
 
 @app.post("/devolucao", status_code=200, response_model=Devolucao, tags=["Aluguel"])
 def realizar_devolucao(idTranca: int = Body(...), idBicicleta: int = Body(...), db: Session = Depends(get_db)):
     ciclista_service = CiclistaService(db)
     resp = ciclista_service.realizar_devolucao(idBicicleta, idTranca)
-    if not resp:
-        raise HTTPException(status_code=404, detail="Bicicleta ou tranca não encontradas")
+    return resp

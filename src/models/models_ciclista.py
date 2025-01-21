@@ -60,10 +60,11 @@ class AluguelDB(Base):
     ciclista_id = Column(Integer, ForeignKey("ciclista.id"), nullable=False)
     horaInicio = Column(DateTime, nullable=False)
     horaFim = Column(DateTime, nullable=True)
-    trancaInicio = Column(DateTime, nullable=False)
-    trancaFim = Column(DateTime, nullable=True)
+    trancaInicio = Column(Integer, nullable=False)
+    trancaFim = Column(Integer, nullable=True)
     cobranca = Column(Double, nullable=False)
     bicicleta = Column(Integer, nullable=False)
+    cobranca_adicional = Column(Integer, nullable=True)
 
     # Relacionamento com Ciclista
     ciclista = relationship("Ciclista", back_populates="aluguel")

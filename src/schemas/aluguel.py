@@ -7,7 +7,7 @@ class Aluguel(BaseModel):
     bicicleta: int
     horaInicio: datetime.datetime
     trancaFim: Optional[int] = None
-    horaFim: Optional[int] = None
+    horaFim: Optional[datetime.datetime] = None
     cobranca: int
     ciclista: int
     trancaInicio: int

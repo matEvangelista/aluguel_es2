@@ -1,5 +1,5 @@
 import datetime
-from http.client import HTTPException
+from fastapi import HTTPException
 from typing import List
 from fastapi.openapi.utils import status_code_ranges
 from sqlalchemy.orm import Session, joinedload
@@ -13,10 +13,17 @@ class CiclistaService:
         self.db = db
 
     def cadastrar_ciclista(self, ciclista: NovoCiclista, meio_de_pagamento: NovoCartaoDeCredito):
-        # Criar o objeto Ciclista sem o relacionamento aninhado
+
+        if not ciclista.nacionalidade.lower().strip().startswith('brasileir') and ciclista.passaporte is None:
+            raise Exception("Estrangeiro sem passaporte.")
+        if ciclista.nacionalidade.lower().strip().startswith('brasileir') and ciclista.cpf is None:
+            raise Exception("Brasileiro sem cpf.")
+
+        # criar o objeto Ciclista sem o relacionamento aninhado
         ciclista_data = ciclista.model_dump(exclude={"passaporte"})
         ciclista_data["urlFotoDocumento"] = str(ciclista_data["urlFotoDocumento"])
         novo_ciclista = Ciclista(**ciclista_data)
+
 
         # Se houver dados do passaporte, cria a instância do modelo Passaporte
         if ciclista.passaporte:
@@ -208,7 +215,11 @@ class CiclistaService:
                                                   AluguelDB.trancaFim.is_(None)).first()
 
         if aluguel:
-            raise Exception("Ciclista já possui aluguel")
+            raise HTTPException(status_code=422, detail="Ciclista já possui aluguel")
+
+        if ciclista.status == 'INATIVO':
+            raise HTTPException(status_code=422, detail="Ciclista precisa ser ativado.")
+
 
         # Todo: pegar bicicleta da tranca
         dummy_bicicleta = 1
@@ -226,12 +237,15 @@ class CiclistaService:
             horaInicio=hora_inicio  # Definindo a hora de início corretamente
         )
 
-        aluguel_dados = aluguel.model_dump()
-        aluguel_dados['ciclista_id'] = aluguel_dados['ciclista']
-        del aluguel_dados['ciclista']
-
         # Criando o objeto de banco de dados AluguelDB e inserindo no banco
-        aluguel_banco = AluguelDB(**aluguel_dados)
+        aluguel_banco = AluguelDB(
+            ciclista_id = id_ciclista,
+            trancaInicio = id_tranca_inicio,
+            cobranca=dummy_cobranca,
+            horaInicio=hora_inicio,
+            bicicleta=dummy_bicicleta
+        )
+
         self.db.add(aluguel_banco)
         self.db.commit()
         self.db.refresh(aluguel_banco)
@@ -243,7 +257,7 @@ class CiclistaService:
                                                   AluguelDB.trancaFim.is_(None),
                                                   AluguelDB.horaFim.is_(None)).first()
         if not aluguel:
-            return None
+            raise HTTPException(status_code=404, detail="Tranca ou bicicleta inválidas")
 
         hora_inicial = aluguel.horaInicio
         hora_final = datetime.datetime.now()
@@ -255,7 +269,8 @@ class CiclistaService:
 
         # todo: chamar cobranca
         dummy_nova_cobranca = 2
-        aluguel.cobranca_adicional = dummy_nova_cobranca
+        if valor_a_cobrar > 0:
+            aluguel.cobranca_adicional = dummy_nova_cobranca
 
         # Salva as alterações no banco de dados
         self.db.commit()
