@@ -209,7 +209,7 @@ class CiclistaService:
     def realizar_aluguel(self, id_ciclista, id_tranca_inicio):
         ciclista = self.recupera_ciclista_por_id(id_ciclista)
         if not ciclista:
-            return None
+            raise HTTPException(status_code=404, detail="Ciclista não encontrado.")
 
         aluguel = self.db.query(AluguelDB).filter(AluguelDB.ciclista_id == id_ciclista,
                                                   AluguelDB.trancaFim.is_(None)).first()
