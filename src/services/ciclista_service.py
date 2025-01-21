@@ -1,9 +1,12 @@
+import datetime
 from http.client import HTTPException
 from typing import List
 from fastapi.openapi.utils import status_code_ranges
 from sqlalchemy.orm import Session, joinedload
 from ..models import Ciclista, CartaoCreditoDB, Passaporte, FuncionarioDB, AluguelDB
-from ..schemas import NovoCiclista, NovoCartaoDeCredito, NovoFuncionario, Funcionario
+from ..schemas import NovoCiclista, NovoCartaoDeCredito, NovoFuncionario, Funcionario, Aluguel, Devolucao
+from ..controllers import AluguelController
+
 
 class CiclistaService:
     def __init__(self, db: Session):
@@ -195,3 +198,77 @@ class CiclistaService:
         self.db.commit()
 
         return True
+
+    def realizar_aluguel(self, id_ciclista, id_tranca_inicio):
+        ciclista = self.recupera_ciclista_por_id(id_ciclista)
+        if not ciclista:
+            return None
+
+        aluguel = self.db.query(AluguelDB).filter(AluguelDB.ciclista_id == id_ciclista,
+                                                  AluguelDB.trancaFim.is_(None)).first()
+
+        if aluguel:
+            raise Exception("Ciclista já possui aluguel")
+
+        # Todo: pegar bicicleta da tranca
+        dummy_bicicleta = 1
+
+        # Todo: chamar o método para calcular cobrança
+        dummy_cobranca = 1
+
+        hora_inicio = datetime.datetime.now()
+
+        aluguel = Aluguel(
+            bicicleta=dummy_bicicleta,
+            trancaInicio=id_tranca_inicio,
+            cobranca=dummy_cobranca,
+            ciclista=id_ciclista,
+            horaInicio=hora_inicio  # Definindo a hora de início corretamente
+        )
+
+        aluguel_dados = aluguel.model_dump()
+        aluguel_dados['ciclista_id'] = aluguel_dados['ciclista']
+        del aluguel_dados['ciclista']
+
+        # Criando o objeto de banco de dados AluguelDB e inserindo no banco
+        aluguel_banco = AluguelDB(**aluguel_dados)
+        self.db.add(aluguel_banco)
+        self.db.commit()
+        self.db.refresh(aluguel_banco)
+
+        return aluguel
+
+    def realizar_devolucao(self, id_bicicleta, id_tranca_fim):
+        aluguel = self.db.query(AluguelDB).filter(AluguelDB.bicicleta == id_bicicleta,
+                                                  AluguelDB.trancaFim.is_(None),
+                                                  AluguelDB.horaFim.is_(None)).first()
+        if not aluguel:
+            return None
+
+        hora_inicial = aluguel.horaInicio
+        hora_final = datetime.datetime.now()
+
+        aluguel.horaFim = hora_final
+        aluguel.trancaFim = id_tranca_fim
+
+        valor_a_cobrar = AluguelController.calcula_valor_extra(hora_inicial, hora_final)
+
+        # todo: chamar cobranca
+        dummy_nova_cobranca = 2
+        aluguel.cobranca_adicional = dummy_nova_cobranca
+
+        # Salva as alterações no banco de dados
+        self.db.commit()
+        self.db.refresh(aluguel)
+
+        # Cria e retorna o objeto Devolucao
+        devolucao = Devolucao(
+            bicicleta=id_bicicleta,
+            horaInicio=hora_inicial,
+            horaFim=hora_final,
+            trancaFim=id_tranca_fim,
+            cobranca=dummy_nova_cobranca,
+            ciclista=aluguel.ciclista_id
+        )
+
+        return devolucao

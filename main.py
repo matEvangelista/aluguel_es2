@@ -7,7 +7,7 @@ from typing import List
 from sqlalchemy import text
 from database import SessionLocal
 from src.schemas import (NovoCiclista, Ciclista, NovoCartaoDeCredito, CartaoCredito, Funcionario,
-                         NovoFuncionario, NovoCiclistaPut, NovoFuncionarioPut, Bicicleta)
+                         NovoFuncionario, NovoCiclistaPut, NovoFuncionarioPut, Bicicleta, Aluguel, Devolucao)
 from src.services import CiclistaService
 
 
@@ -149,3 +149,20 @@ def delete_funcionario(idFuncionario: int, db: Session = Depends(get_db)):
     if not resultado:
         raise HTTPException(status_code=404, detail="Funcionário não encontrado")
 
+@app.post("/aluguel", status_code=200, response_model=Aluguel, tags=["Aluguel"])
+def realizar_aluguel(ciclista: int = Body(...), trancaInicio: int = Body(...), db: Session = Depends(get_db)):
+    ciclista_service = CiclistaService(db)
+    try:
+        resultado = ciclista_service.realizar_aluguel(ciclista, trancaInicio)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    if not resultado:
+        raise HTTPException(status_code=404, detail="Ciclista não encontrado.")
+    return resultado
+
+@app.post("/devolucao", status_code=200, response_model=Devolucao, tags=["Aluguel"])
+def realizar_devolucao(idTranca: int = Body(...), idBicicleta: int = Body(...), db: Session = Depends(get_db)):
+    ciclista_service = CiclistaService(db)
+    resp = ciclista_service.realizar_devolucao(idBicicleta, idTranca)
+    if not resp:
+        raise HTTPException(status_code=404, detail="Bicicleta ou tranca não encontradas")

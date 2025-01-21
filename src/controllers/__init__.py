@@ -1,0 +1,1 @@
+from .aluguel_controller import AluguelController
