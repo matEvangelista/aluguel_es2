@@ -114,8 +114,8 @@ def recupera_funcionarios(db: Session = Depends(get_db)):
     ciclista_service = CiclistaService(db)
     return ciclista_service.recupera_funcionarios()
 
-@app.post("/funcionario", response_model=Funcionario, status_code=201, tags=["Aluguel"])
-def cadastrar_ciclista(
+@app.post("/funcionario", response_model=Funcionario, status_code=200, tags=["Aluguel"])
+def cadastrar_funcionario(
     funcionario: NovoFuncionario = Body(...),
     db: Session = Depends(get_db),
 ):

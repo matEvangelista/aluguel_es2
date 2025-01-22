@@ -9,7 +9,7 @@ class Passaporte(BaseModel):
     validade: FutureDate
     pais: CountryAlpha2
     class Meta:
-        orm_model = PassaporteDB
+        from_attributes = PassaporteDB
 
 class NovoCiclista(BaseModel):
     nome: str
@@ -43,5 +43,5 @@ class NovoCiclistaPut(BaseModel):
     urlFotoDocumento: Optional[AnyUrl] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 

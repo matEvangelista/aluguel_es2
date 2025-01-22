@@ -13,7 +13,7 @@ class Aluguel(BaseModel):
     trancaInicio: int
 
     class Config:
-        orm_mode = True  # Permite que o Pydantic seja usado com o ORM
+        from_attributes = True  # Permite que o Pydantic seja usado com o ORM
 
 class Devolucao(BaseModel):
     bicicleta: int
