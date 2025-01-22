@@ -7,4 +7,4 @@ uvicorn
 pydantic-extra-types
 email_validator
 python-dotenv
-requestes
+requests
