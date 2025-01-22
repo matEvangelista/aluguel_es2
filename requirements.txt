@@ -6,3 +6,4 @@ fastapi
 uvicorn
 pydantic-extra-types
 email_validator
+python-dotenv
