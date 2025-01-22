@@ -6,11 +6,43 @@ from sqlalchemy.orm import Session, joinedload
 from ..models import Ciclista, CartaoCreditoDB, Passaporte, FuncionarioDB, AluguelDB
 from ..schemas import NovoCiclista, NovoCartaoDeCredito, NovoFuncionario, Funcionario, Aluguel, Devolucao
 from ..controllers import AluguelController
+import requests
 
 
 class CiclistaService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, url_externo:str = None, url_equipamento: str = None):
         self.db = db
+        self.url_externo = url_externo
+        self.url_equipamento = url_equipamento
+
+    def enviar_email(self, assunto, mensagem, endereco_email):
+        url = self.url_externo + "/enviarEmail"
+        # Dados do corpo da requisição
+        corpo = {
+            "email": endereco_email,
+            "assunto": assunto,
+            "mensagem": mensagem
+        }
+        headers = {
+            "Content-Type": "application/json"  # Certifique-se de enviar como JSON
+        }
+        response = requests.post(url, json=corpo, headers=headers)
+        # verificando a resposta
+        return response.status_code == 200
+
+    def validar_cartao(self, cartao:NovoCartaoDeCredito):
+        url = self.url_externo + "/validaCartaoDeCredito"
+        corpo = {
+            "numero": cartao.numero,
+            "validade": cartao.validade.isoformat(),
+            "cvv": cartao.cvv,
+            "nomeTitular": cartao.nomeTitular
+        }
+        headers = {
+            "Content-Type": "application/json"  # Certifique-se de enviar como JSON
+        }
+        response = requests.post(url, json=corpo, headers=headers)
+        return response.status_code == 200
 
     def cadastrar_ciclista(self, ciclista: NovoCiclista, meio_de_pagamento: NovoCartaoDeCredito):
 
@@ -30,10 +62,27 @@ class CiclistaService:
             passaporte_data = ciclista.passaporte.model_dump()
             novo_ciclista.passaporte = Passaporte(**passaporte_data)
 
+        cartao_valido = self.validar_cartao(meio_de_pagamento)
+
+        if not cartao_valido:
+            raise HTTPException(status_code=422, detail="Cartão de crédito inválido.")
+
         # Adicionar o Ciclista ao banco de dados
         self.db.add(novo_ciclista)
         self.db.commit()
         self.db.refresh(novo_ciclista)
+
+        mensagem = (f"Caro {ciclista.nome},<br><br> Sua inscrição no sistema de bicletas do grupo A precisa ser validada agora"
+                    f"<br><br>Cordialmente, <br>Grupo A")
+
+        # enviar email para novo ciclista
+        enviou_email = self.enviar_email(assunto="Cadastro de ciclista -- Grupo A",
+                                         mensagem=mensagem,
+                                         endereco_email=ciclista.email)
+
+        if not enviou_email:
+            raise HTTPException(422, "Não foi possível enviar o email")
+
 
         # Criar o objeto de meio de pagamento associado ao ciclista
         meio_de_pagamento_data = meio_de_pagamento.model_dump()
@@ -78,9 +127,23 @@ class CiclistaService:
                 self.db.add(passaporte)
                 ciclista.passaporte = passaporte
 
+        if 'brasileir' in ciclista.nacionalidade.lower() and ciclista.cpf is None:
+            raise HTTPException(422, "Brasileiro sem CPF")
+        if 'brasileir' not in ciclista.nacionalidade.lower() and ciclista.passaporte is None:
+            raise HTTPException(422, "Estrangeiro sem Passaporte")
+
         # Commit na atualização
         self.db.commit()
         self.db.refresh(ciclista)
+
+        assunto = "Atualização de dados"
+        mensagem = (f"Prezado {ciclista.nome},<br><br> Informamos que seus dados foram atualizados com sucesso"
+                    f"<br><br>Cordialmente, <br>Grupo A")
+
+        enviou_email = self.enviar_email(assunto=assunto, mensagem=mensagem, endereco_email=ciclista.email)
+        if not enviou_email:
+            raise HTTPException(422, "Email não pode ser enviado.")
+
         return ciclista
 
     def ativar_ciclista(self, id_ciclista: int):
@@ -88,12 +151,19 @@ class CiclistaService:
         ciclista = self.recupera_ciclista_por_id(id_ciclista)
 
         if not ciclista:
-            return None
+            raise HTTPException(status_code=404, detail="Cicilista não encontrado.")
+
+        if ciclista.status == 'ATIVO':
+            raise HTTPException(status_code=422, detail="Ciclista já cadastrado.")
 
         ciclista.status = 'ATIVO'
 
-        self.db.commit()
-        self.db.refresh(ciclista)
+        try:
+            self.db.commit()
+            self.db.refresh(ciclista)
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail="Erro ao ativar o ciclista.") from e
 
         return ciclista
 

@@ -1,3 +1,6 @@
+import os
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, Body
 from fastapi.openapi.utils import status_code_ranges
 from pydantic import ValidationError, EmailStr
@@ -9,7 +12,9 @@ from database import SessionLocal
 from src.schemas import (NovoCiclista, Ciclista, NovoCartaoDeCredito, CartaoCredito, Funcionario,
                          NovoFuncionario, NovoCiclistaPut, NovoFuncionarioPut, Bicicleta, Aluguel, Devolucao)
 from src.services import CiclistaService
-
+load_dotenv()
+URL_EXTERNO=os.getenv('URL_EXTERNO')
+URL_EQUIPAMENTO=os.getenv("URL_EQUIPAMENTO")
 
 app = FastAPI()
 
@@ -35,7 +40,7 @@ def cadastrar_ciclista(
     meioDePagamento: NovoCartaoDeCredito = Body(...),
     db: Session = Depends(get_db),
 ):
-    ciclista_service = CiclistaService(db)
+    ciclista_service = CiclistaService(db, url_externo=URL_EXTERNO)
     try:
         novo_ciclista = ciclista_service.cadastrar_ciclista(ciclista, meioDePagamento)
         return novo_ciclista
@@ -57,7 +62,7 @@ def recupera_ciclista(
 
 @app.put("/ciclista/{idCiclista}", response_model=Ciclista, status_code=200, tags=["Aluguel"])
 def atualizar_ciclista(idCiclista: int, ciclista: NovoCiclistaPut = Body(...), db: Session = Depends(get_db)):
-    service = CiclistaService(db)
+    service = CiclistaService(db, url_externo=URL_EXTERNO)
     dados_atualizados = ciclista.model_dump(exclude_unset=True)  # Só inclui os campos que foram enviados
     ciclista_atualizado = service.atualizar_ciclista(idCiclista, dados_atualizados)
     if not ciclista_atualizado:
@@ -68,8 +73,6 @@ def atualizar_ciclista(idCiclista: int, ciclista: NovoCiclistaPut = Body(...), d
 def ativar_ciclista(idCiclista: int, db: Session = Depends(get_db)):
     service = CiclistaService(db)
     ciclista = service.ativar_ciclista(idCiclista)
-    if not ciclista:
-        raise HTTPException(status_code=404, detail="Ciclista não encontrado.")
     return ciclista
 
 @app.post("/ciclista/existeEmail/{email}", status_code=200, response_model=bool, tags=['Aluguel'])
