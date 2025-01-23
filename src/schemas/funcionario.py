@@ -15,7 +15,7 @@ class NovoFuncionario(BaseModel):
         from_attributes = True
 
 class Funcionario(NovoFuncionario):
-    id: int # para o bd
+    matricula: int # para o bd
     class Config:
         from_attributes = True
 

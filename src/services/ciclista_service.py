@@ -133,9 +133,9 @@ class CiclistaService:
 
     def cadastrar_ciclista(self, ciclista: NovoCiclista, meio_de_pagamento: NovoCartaoDeCredito):
 
-        if not ciclista.nacionalidade.lower().strip().startswith('brasileir') and ciclista.passaporte is None:
+        if not ciclista.nacionalidade == 'BRASILEIRO' and ciclista.passaporte is None:
             raise Exception("Estrangeiro sem passaporte.")
-        if ciclista.nacionalidade.lower().strip().startswith('brasileir') and ciclista.cpf is None:
+        if ciclista.nacionalidade.lower() == 'ESTRANGEIRO' and ciclista.cpf is None:
             raise Exception("Brasileiro sem cpf.")
 
         if self.conferir_email_ja_foi_utilizado(ciclista.email):
@@ -205,9 +205,9 @@ class CiclistaService:
             if key != "passaporte" and hasattr(ciclista, key):
                 setattr(ciclista, key, value if key != "urlFotoDocumento" else str(value))
 
-        if 'brasileir' in ciclista.nacionalidade.lower() and ciclista.cpf is None:
+        if ciclista.nacionalidade == 'BRASILEIRO' and ciclista.cpf is None:
             raise HTTPException(422, "Brasileiro sem CPF")
-        if 'brasileir' not in ciclista.nacionalidade.lower() and ciclista.passaporte is None:
+        if ciclista.nacionalidade == 'ESTRANGEIRO' and ciclista.passaporte is None:
             raise HTTPException(422, "Estrangeiro sem Passaporte")
 
         if "passaporte" in dados_ciclista:
@@ -260,13 +260,16 @@ class CiclistaService:
         ciclista = self.recupera_ciclista_por_id(id_ciclista)
 
         if not ciclista:
-            return None
+            raise HTTPException(404, "Ciclista não encontrado")
 
         cartao = (
             self.db.query(CartaoCreditoDB)
             .filter(CartaoCreditoDB.ciclista_id == ciclista.id)
             .first()
         )
+
+        if not cartao:
+            raise HTTPException(status_code=404, detail="Ciclista não tem cartão")
 
         return cartao
 
@@ -356,7 +359,7 @@ class CiclistaService:
         return novo_funcionario
 
     def recupera_funcionario(self, id_funcionario):
-        funcionario = self.db.query(FuncionarioDB).filter(FuncionarioDB.id == id_funcionario).first()
+        funcionario = self.db.query(FuncionarioDB).filter(FuncionarioDB.matricula == id_funcionario).first()
         return funcionario
 
     def editar_funcionario(self, id_funcionario, dados_funcionario):
@@ -370,11 +373,11 @@ class CiclistaService:
 
         self.db.commit()
         self.db.refresh(funcionario)
-        return self.db.query(FuncionarioDB).filter(FuncionarioDB.id == id_funcionario).first()
+        return self.db.query(FuncionarioDB).filter(FuncionarioDB.matricula == id_funcionario).first()
 
     def delete_funcionario(self, id_funcionario: int):
         # Recupera o funcionário pelo ID
-        funcionario = self.db.query(FuncionarioDB).filter(FuncionarioDB.id == id_funcionario).first()
+        funcionario = self.db.query(FuncionarioDB).filter(FuncionarioDB.matricula == id_funcionario).first()
 
         if not funcionario:
             return None

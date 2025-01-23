@@ -2,7 +2,11 @@ from pydantic import BaseModel, EmailStr, ValidationError, field_validator, cons
 from pydantic_extra_types.country import CountryAlpha2
 from typing import Optional, Annotated
 from ..models import Passaporte as PassaporteDB
+from enum import Enum
 
+class Nacionalidade(str, Enum):
+    BRASILEIRO = 'BRASILEIRO'
+    ESTRANGEIRO = 'ESTRANGEIRO'
 
 class Passaporte(BaseModel):
     numero: str
@@ -14,7 +18,7 @@ class Passaporte(BaseModel):
 class NovoCiclista(BaseModel):
     nome: str
     email: EmailStr
-    nacionalidade: str
+    nacionalidade: Nacionalidade
     nascimento: PastDate
     senha: str
     cpf: Optional[str] = Field(pattern=r"^\d{11}$", default=None)
@@ -35,7 +39,7 @@ class Ciclista(NovoCiclista):
 class NovoCiclistaPut(BaseModel):
     nome: Optional[str] = None
     email: Optional[EmailStr] = None
-    nacionalidade: Optional[str] = None
+    nacionalidade: Optional[Nacionalidade] = None
     nascimento: Optional[PastDate] = None
     senha: Optional[str] = None
     cpf: Optional[str] = Field(pattern=r"^\d{11}$", default=None)

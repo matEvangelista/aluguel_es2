@@ -25,13 +25,27 @@ def get_db():
     finally:
         db.close()
 
+import os
+
 @app.post("/restaurarBanco", status_code=200, tags=["Aluguel"], description="Banco restaurado.")
 def restaurar_banco(db: Session = Depends(get_db)):
-    tabelas = ['ciclista', 'cartao_credito', 'funcionario', 'passaporte', 'aluguel']
-    for tabela in tabelas:
-        string = f'DELETE from {tabela}'
-        db.execute(text(string))
-    db.commit()
+    sql_file_path = os.path.join(os.path.dirname(__file__), 'restaurar_banco.sql')
+
+    with open(sql_file_path, 'r') as file:
+        sql_commands = file.read()
+
+    # Dividir o conteúdo em comandos separados por ponto e vírgula
+    sql_commands = sql_commands.split(';') # maluquice do sqlite
+    try:
+        for command in sql_commands:
+            command = command.strip()
+            if command:
+                db.execute(text(command)) # peculiaridade do sqlalchemy
+        db.commit()
+        return {"message": "Banco restaurado com sucesso!"}
+    except Exception as e:
+        raise HTTPException(500, "Deu errado")
+
 
 @app.post("/ciclista", response_model=Ciclista, status_code=201, tags=["Aluguel"])
 def cadastrar_ciclista(
@@ -93,8 +107,6 @@ def buscar_bicicleta_alugada_atualmente(idCiclista: int, db: Session = Depends(g
 def busca_cartao(idCiclista:int, db: Session = Depends(get_db)):
     service = CiclistaService(db)
     cartao = service.busca_cartao(idCiclista)
-    if not cartao:
-        raise HTTPException(status_code=404, detail="Ciclista não encontrado.")
     return cartao
 
 @app.put("/cartaoDeCredito/{idCiclista}", status_code=200, tags=['Aluguel'])

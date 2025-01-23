@@ -7,7 +7,7 @@ Base = declarative_base()
 class FuncionarioDB(Base):
     __tablename__ = "funcionario"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    matricula = Column(Integer, primary_key=True, autoincrement=True)
     nome = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     senha = Column(String, nullable=False)
