@@ -5,7 +5,7 @@ from typing import Optional
 class NovoCartaoDeCredito(BaseModel):
     numero: PaymentCardNumber
     validade: FutureDate
-    cvv: str = Field(pattern=r"^\d{3}$")
+    cvv: str = Field(pattern=r"^\d{3,4}$")
     nomeTitular: str
 
     class Config:

@@ -39,10 +39,89 @@ class CiclistaService:
             "nomeTitular": cartao.nomeTitular
         }
         headers = {
-            "Content-Type": "application/json"  # Certifique-se de enviar como JSON
+            "Content-Type": "application/json"
         }
         response = requests.post(url, json=corpo, headers=headers)
         return response.status_code == 200
+
+    def busca_tranca(self, id_tranca: int):
+        url = self.url_equipamento + f"/tranca/{id_tranca}"
+        headers = {'accept': 'application/json'}
+        resp = requests.get(url, headers=headers)
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+
+    def busca_bicicleta(self, id_tranca: int):
+        url = self.url_equipamento + f"/tranca/{id_tranca}/bicicleta"
+        headers = {'accept': 'application/json'}
+        resp = requests.get(url, headers=headers)
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+
+    def bicicleta_em_uso(self, id_bicleta: int):
+        url = self.url_equipamento + f"/bicicleta/{id_bicleta}"
+        headers = {'accept': 'application/json'}
+        resp = requests.get(url, headers=headers)
+        if resp.status_code != 200:
+            return False
+        return resp.json()['status']=='EM_USO'
+
+    def destranca(self, id_tranca, id_bicicleta):
+        url = self.url_equipamento + f"/tranca/{id_tranca}/destrancar"
+        corpo = {
+            "bicicleta": id_bicicleta,
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        response = requests.post(url, json=corpo, headers=headers)
+        if response.status_code != 200:
+            return None
+        return response.json()
+
+    def tranca(self, id_tranca, id_bicicleta):
+        url = self.url_equipamento + f"/tranca/{id_tranca}/trancar"
+        corpo = {
+            "bicicleta": id_bicicleta,
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        response = requests.post(url, json=corpo, headers=headers)
+        if response.status_code != 200:
+            return None
+        return response.json()
+
+    def fazer_cobranca(self, id_ciclista, valor):
+        url = self.url_externo + "/cobranca"
+        corpo = {
+            "ciclista": id_ciclista,
+            "valor": valor
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        response = requests.post(url, json=corpo, headers=headers)
+        if response.status_code != 200:
+            return None
+        return response.json()
+
+    def fazer_cobranca_pendente(self, id_ciclista, valor):
+        url = self.url_externo + "/filaCobranca"
+        corpo = {
+            "ciclista": id_ciclista,
+            "valor": valor
+        }
+        headers = {
+            "Content-Type": "application/json"  # Certifique-se de enviar como JSON
+        }
+        response = requests.post(url, json=corpo, headers=headers)
+        if response.status_code != 200:
+            return None
+        return response.json()
+
 
     def cadastrar_ciclista(self, ciclista: NovoCiclista, meio_de_pagamento: NovoCartaoDeCredito):
 
@@ -50,6 +129,9 @@ class CiclistaService:
             raise Exception("Estrangeiro sem passaporte.")
         if ciclista.nacionalidade.lower().strip().startswith('brasileir') and ciclista.cpf is None:
             raise Exception("Brasileiro sem cpf.")
+
+        if self.conferir_email_ja_foi_utilizado(ciclista.email):
+            raise Exception("Outro ciclista possui este email.")
 
         # criar o objeto Ciclista sem o relacionamento aninhado
         ciclista_data = ciclista.model_dump(exclude={"passaporte"})
@@ -72,8 +154,15 @@ class CiclistaService:
         self.db.commit()
         self.db.refresh(novo_ciclista)
 
-        mensagem = (f"Caro {ciclista.nome},<br><br> Sua inscrição no sistema de bicletas do grupo A precisa ser validada agora"
-                    f"<br><br>Cordialmente, <br>Grupo A")
+        # Criar o objeto de meio de pagamento associado ao ciclista
+        meio_de_pagamento_data = meio_de_pagamento.model_dump()
+        novo_meio_de_pagamento = CartaoCreditoDB(**meio_de_pagamento_data, ciclista_id=novo_ciclista.id)
+        self.db.add(novo_meio_de_pagamento)
+        self.db.commit()
+
+        mensagem = (
+            f"Caro {ciclista.nome},<br><br> Sua inscrição no sistema de bicletas do grupo A precisa ser validada agora"
+            f"<br><br>Cordialmente, <br>Grupo A")
 
         # enviar email para novo ciclista
         enviou_email = self.enviar_email(assunto="Cadastro de ciclista -- Grupo A",
@@ -82,13 +171,6 @@ class CiclistaService:
 
         if not enviou_email:
             raise HTTPException(422, "Não foi possível enviar o email")
-
-
-        # Criar o objeto de meio de pagamento associado ao ciclista
-        meio_de_pagamento_data = meio_de_pagamento.model_dump()
-        novo_meio_de_pagamento = CartaoCreditoDB(**meio_de_pagamento_data, ciclista_id=novo_ciclista.id)
-        self.db.add(novo_meio_de_pagamento)
-        self.db.commit()
 
         return novo_ciclista
 
@@ -102,35 +184,34 @@ class CiclistaService:
         return ciclista
 
     def atualizar_ciclista(self, id_ciclista: int, dados_ciclista: dict):
-        # Recupera o ciclista pelo ID
         ciclista = self.recupera_ciclista_por_id(id_ciclista)
 
         if not ciclista:
-            return None
+            raise HTTPException(404, "Ciclista não encontrado")
 
-        # Atualiza os campos do ciclista
+        if ciclista.status == 'AGUARDANDO_CONFIRMACAO':
+            raise HTTPException(422, "Ciclista não ativou email")
+
+        # atualiza os campos do ciclista
         for key, value in dados_ciclista.items():
             if key != "passaporte" and hasattr(ciclista, key):
                 setattr(ciclista, key, value if key != "urlFotoDocumento" else str(value))
-
-        # Atualiza ou cria o passaporte, se enviado
-        if "passaporte" in dados_ciclista:
-            passaporte_dados = dados_ciclista["passaporte"]
-            if ciclista.passaporte:
-                # Atualiza o passaporte existente
-                for key, value in passaporte_dados.items():
-                    if hasattr(ciclista.passaporte, key):
-                        setattr(ciclista.passaporte, key, value)
-            else:
-                # Cria um novo passaporte
-                passaporte = Passaporte(**passaporte_dados, ciclista_id=ciclista.id)
-                self.db.add(passaporte)
-                ciclista.passaporte = passaporte
 
         if 'brasileir' in ciclista.nacionalidade.lower() and ciclista.cpf is None:
             raise HTTPException(422, "Brasileiro sem CPF")
         if 'brasileir' not in ciclista.nacionalidade.lower() and ciclista.passaporte is None:
             raise HTTPException(422, "Estrangeiro sem Passaporte")
+
+        if "passaporte" in dados_ciclista:
+            passaporte_dados = dados_ciclista["passaporte"]
+            if ciclista.passaporte:
+                for key, value in passaporte_dados.items():
+                    if hasattr(ciclista.passaporte, key):
+                        setattr(ciclista.passaporte, key, value)
+            else:
+                passaporte = Passaporte(**passaporte_dados, ciclista_id=ciclista.id)
+                self.db.add(passaporte)
+                ciclista.passaporte = passaporte
 
         # Commit na atualização
         self.db.commit()
@@ -153,10 +234,10 @@ class CiclistaService:
         if not ciclista:
             raise HTTPException(status_code=404, detail="Cicilista não encontrado.")
 
-        if ciclista.status == 'ATIVO':
-            raise HTTPException(status_code=422, detail="Ciclista já cadastrado.")
+        if ciclista.status == 'CONFIRMADO':
+            raise HTTPException(status_code=422, detail="Ciclista já confirmado.")
 
-        ciclista.status = 'ATIVO'
+        ciclista.status = 'CONFIRMADO'
 
         try:
             self.db.commit()
@@ -181,10 +262,18 @@ class CiclistaService:
 
         return cartao
 
-    def edita_cartao(self, id_ciclista: int, novo_cartao = NovoCartaoDeCredito):
+    def edita_cartao(self, id_ciclista: int, novo_cartao: NovoCartaoDeCredito):
         ciclista = self.recupera_ciclista_por_id(id_ciclista)
         if not ciclista:
-            return None
+            raise HTTPException(404, "Ciclista não encontrado")
+
+        if ciclista.status == 'AGUARDANDO_CONFIRMACAO':
+            raise HTTPException(422, "Ciclista não foi ativado.")
+
+        cartao_valido = self.validar_cartao(cartao=novo_cartao)
+
+        if not cartao_valido:
+            raise HTTPException(422, "Cartão de crédito inválido.")
 
         cartao = (
             self.db.query(CartaoCreditoDB)
@@ -198,7 +287,14 @@ class CiclistaService:
 
         self.db.commit()
         self.db.refresh(cartao)
-        return True
+
+        enviou_email = self.enviar_email(assunto="Edição de Cartão -- Grupo A",
+                                         mensagem=f"Prezado {ciclista.nome},<br><br>"
+                                                  f"O cartão de crédito foi editado com sucesso.<br><br>"
+                                                  f"Cordialmente,<br>Grupo A",
+                                         endereco_email=ciclista.email)
+        if not enviou_email:
+            raise HTTPException(422, "Email não enviado.")
 
     def conferir_email_ja_foi_utilizado(self, email):
         return self.db.query(Ciclista).filter(Ciclista.email == email).first() is not None
@@ -206,9 +302,11 @@ class CiclistaService:
     def ciclista_pode_alugar(self, id_ciclista):
         ciclista = self.recupera_ciclista_por_id(id_ciclista)
         if ciclista is None:
-            return None
+            raise HTTPException(404, "Ciclista não encontrado")
+
         aluguel = self.db.query(AluguelDB).filter(AluguelDB.ciclista_id == id_ciclista, AluguelDB.horaFim.is_(None)).first()
-        if not aluguel:
+
+        if not aluguel and ciclista.status == 'CONFIRMADO':
             return True
         return False
 
@@ -287,22 +385,35 @@ class CiclistaService:
         if aluguel:
             raise HTTPException(status_code=422, detail="Ciclista já possui aluguel")
 
-        if ciclista.status == 'INATIVO':
+        if ciclista.status == 'AGUARDANDO_CONFIRMACAO':
             raise HTTPException(status_code=422, detail="Ciclista precisa ser ativado.")
 
+        bicicleta = self.busca_bicicleta(id_tranca=id_tranca_inicio)
+        if not bicicleta:
+            raise HTTPException(422, "Bicicleta não encontrada.")
 
-        # Todo: pegar bicicleta da tranca
-        dummy_bicicleta = 1
+        tranca = self.busca_tranca(id_tranca_inicio)
+        if not tranca or tranca['status'] != 'OCUPADA':
+            raise HTTPException(422, "Tranca não encontrada ou com defeito.")
 
-        # Todo: chamar o método para calcular cobrança
-        dummy_cobranca = 1
+        cobranca = self.fazer_cobranca(id_ciclista=id_ciclista, valor=10)
+        string_cobranca = "Houve cobrança de <b>R$10,00<b/>"
+        if not cobranca:
+            string_cobranca = "Há uma cobrança pendente de <b>R$10,00<b/>"
+            cobranca = self.fazer_cobranca_pendente(id_ciclista, 10)
+            if not cobranca:
+                raise HTTPException(422, 'Não foi possível fazer a cobrança.')
+
+        tranca = self.destranca(id_tranca=id_tranca_inicio, id_bicicleta=bicicleta['numero'])
+        if not tranca:
+            raise HTTPException(422, "Tranca não pode ser liberada.")
 
         hora_inicio = datetime.datetime.now()
 
         aluguel = Aluguel(
-            bicicleta=dummy_bicicleta,
+            bicicleta=bicicleta['numero'],
             trancaInicio=id_tranca_inicio,
-            cobranca=dummy_cobranca,
+            cobranca=cobranca['id'],
             ciclista=id_ciclista,
             horaInicio=hora_inicio  # Definindo a hora de início corretamente
         )
@@ -311,14 +422,19 @@ class CiclistaService:
         aluguel_banco = AluguelDB(
             ciclista_id = id_ciclista,
             trancaInicio = id_tranca_inicio,
-            cobranca=dummy_cobranca,
+            cobranca=cobranca,
             horaInicio=hora_inicio,
-            bicicleta=dummy_bicicleta
+            bicicleta=bicicleta['numero']
         )
 
         self.db.add(aluguel_banco)
         self.db.commit()
         self.db.refresh(aluguel_banco)
+
+        self.enviar_email("Aluguel de Bicicleta -- Grupo A",
+                          mensagem=f"Prezado {ciclista.nome},<br>"
+                                   f"O aluguel da bicicleta {bicicleta['numero']} foi feito com sucesso às f{hora_inicio}<br>"
+                                   f"{string_cobranca}<br><br>Cordialmente,<br>Grupo A.")
 
         return aluguel
 
@@ -327,7 +443,14 @@ class CiclistaService:
                                                   AluguelDB.trancaFim.is_(None),
                                                   AluguelDB.horaFim.is_(None)).first()
         if not aluguel:
-            raise HTTPException(status_code=404, detail="Tranca ou bicicleta inválidas")
+            raise HTTPException(status_code=404, detail="Tranca ou bicicleta não existem")
+
+        tranca = self.busca_tranca(id_tranca_fim)
+        if tranca is None or tranca['status'] != 'DISPONIVEL':
+            raise HTTPException(status_code=422, detail="Tranca não está disponível")
+
+        if not self.bicicleta_em_uso(id_bicicleta):
+            raise HTTPException(status_code=422, detail="Tranca não está disponível")
 
         hora_inicial = aluguel.horaInicio
         hora_final = datetime.datetime.now()
@@ -336,23 +459,36 @@ class CiclistaService:
         aluguel.trancaFim = id_tranca_fim
 
         valor_a_cobrar = AluguelController.calcula_valor_extra(hora_inicial, hora_final)
-
-        # todo: chamar cobranca
-        dummy_nova_cobranca = 2
+        string_cobranca = ""
         if valor_a_cobrar > 0:
-            aluguel.cobranca_adicional = dummy_nova_cobranca
+            string_cobranca = f"Houve uma cobranca de R${valor_a_cobrar}."
+            nova_cobranca = self.fazer_cobranca(id_ciclista=aluguel.ciclista_id, valor=valor_a_cobrar)
+            if nova_cobranca is None:
+                cobranca_pendente = self.fazer_cobranca_pendente(aluguel.ciclista_id, valor=valor_a_cobrar)
+                if not cobranca_pendente:
+                    raise HTTPException(422, "Erro ao fazer cobranca.")
+                aluguel.cobranca_adicional = cobranca_pendente['id']
+                string_cobranca =f"Há uma cobranca pendente de R${valor_a_cobrar}."
+            aluguel.cobranca_adicional = nova_cobranca['id']
+
+        ciclista = self.recupera_ciclista_por_id(aluguel.ciclista_id)
+
+        self.enviar_email(mensagem=f"Prezado {ciclista.nome},<br><br> Registramos sua devolução às {aluguel.horaFim}."
+                          f"{string_cobranca}<br><br>Cordialmente,<br>Grupo A.", assunto="Devolução -- Grupo A",
+                          endereco_email=ciclista.email)
 
         # Salva as alterações no banco de dados
         self.db.commit()
         self.db.refresh(aluguel)
 
-        # Cria e retorna o objeto Devolucao
+        self.tranca(id_tranca_fim, id_bicicleta)
+
         devolucao = Devolucao(
             bicicleta=id_bicicleta,
             horaInicio=hora_inicial,
             horaFim=hora_final,
             trancaFim=id_tranca_fim,
-            cobranca=dummy_nova_cobranca,
+            cobranca=aluguel.cobranca_adicional,
             ciclista=aluguel.ciclista_id
         )
 
