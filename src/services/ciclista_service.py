@@ -4,7 +4,7 @@ from typing import List
 from fastapi.openapi.utils import status_code_ranges
 from sqlalchemy.orm import Session, joinedload
 from ..models import Ciclista, CartaoCreditoDB, Passaporte, FuncionarioDB, AluguelDB
-from ..schemas import NovoCiclista, NovoCartaoDeCredito, NovoFuncionario, Funcionario, Aluguel, Devolucao
+from ..schemas import NovoCiclista, NovoCartaoDeCredito, NovoFuncionario, Funcionario, Aluguel, Devolucao, Bicicleta
 from ..controllers import AluguelController
 import requests
 
@@ -54,6 +54,14 @@ class CiclistaService:
 
     def busca_bicicleta(self, id_tranca: int):
         url = self.url_equipamento + f"/tranca/{id_tranca}/bicicleta"
+        headers = {'accept': 'application/json'}
+        resp = requests.get(url, headers=headers)
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+
+    def busca_bicicleta_por_id(self, id_bicicleta):
+        url = self.url_equipamento + f"/bicicleta/{id_bicicleta}"
         headers = {'accept': 'application/json'}
         resp = requests.get(url, headers=headers)
         if resp.status_code != 200:
@@ -213,7 +221,7 @@ class CiclistaService:
                 self.db.add(passaporte)
                 ciclista.passaporte = passaporte
 
-        # Commit na atualização
+
         self.db.commit()
         self.db.refresh(ciclista)
 
@@ -312,22 +320,26 @@ class CiclistaService:
 
     def busca_bicicleta_alugada(self, id_ciclista):
         ciclista = self.recupera_ciclista_por_id(id_ciclista)
-        print(ciclista)
         if not ciclista:
             raise Exception("Ciclista não encontrado.")
 
-        bicicleta = (
+        aluguel = (
             self.db.query(AluguelDB)
             .filter(AluguelDB.ciclista_id == id_ciclista, AluguelDB.horaFim.is_(None))
             .first()
         )
-        bicicleta_id = None
-        if bicicleta:
-            bicicleta_id = bicicleta.bicicleta
+        bicicleta_id = aluguel.bicicleta
 
-        #todo : chamar api do Leo pra puxar a bicicleta
+        bicicleta = self.busca_bicicleta_por_id(id_bicicleta=bicicleta_id)
         if not bicicleta:
-            return None
+            raise HTTPException(404, "Bicicleta não encontrada.")
+        bicicleta = Bicicleta(id=bicicleta['id'],
+                              marca=bicicleta['marca'],
+                              modelo=bicicleta['modelo'],
+                              ano=bicicleta['ano'],
+                              numero=bicicleta['numero'],
+                              status=bicicleta['status'])
+        return bicicleta
 
 
     def recupera_funcionarios(self) -> List[Funcionario]:
@@ -351,7 +363,7 @@ class CiclistaService:
         funcionario = self.recupera_funcionario(id_funcionario)
         if not funcionario:
             return None
-        # Atualiza os campos do funcionário (se houver)
+        # altera eventuais os campos do funcionário
         for key, value in dados_funcionario.items():
             if hasattr(funcionario, key):
                 setattr(funcionario, key, value)
@@ -364,7 +376,6 @@ class CiclistaService:
         # Recupera o funcionário pelo ID
         funcionario = self.db.query(FuncionarioDB).filter(FuncionarioDB.id == id_funcionario).first()
 
-        # Se o funcionário não for encontrado, retorna None
         if not funcionario:
             return None
 
@@ -383,6 +394,11 @@ class CiclistaService:
                                                   AluguelDB.trancaFim.is_(None)).first()
 
         if aluguel:
+            self.enviar_email(assunto="Aviso: você ainda possui uma aluguel ativo",
+                              mensagem=f"Prezado {ciclista.nome},<br><br>Notamos que você tentou fazer um novo aluguel, "
+                                       f"mas ainda existe outro em seu nome. Para realizar um novo aluguel, encerre seu aluguel atual.<br><br>"
+                                       f"Cordialmente,<br>Grupo A",
+                              endereco_email=ciclista.email)
             raise HTTPException(status_code=422, detail="Ciclista já possui aluguel")
 
         if ciclista.status == 'AGUARDANDO_CONFIRMACAO':
@@ -422,7 +438,7 @@ class CiclistaService:
         aluguel_banco = AluguelDB(
             ciclista_id = id_ciclista,
             trancaInicio = id_tranca_inicio,
-            cobranca=cobranca,
+            cobranca=cobranca['id'],
             horaInicio=hora_inicio,
             bicicleta=bicicleta['numero']
         )
@@ -433,8 +449,9 @@ class CiclistaService:
 
         self.enviar_email("Aluguel de Bicicleta -- Grupo A",
                           mensagem=f"Prezado {ciclista.nome},<br>"
-                                   f"O aluguel da bicicleta {bicicleta['numero']} foi feito com sucesso às f{hora_inicio}<br>"
-                                   f"{string_cobranca}<br><br>Cordialmente,<br>Grupo A.")
+                                   f"O aluguel da bicicleta {bicicleta['numero']} foi feito com sucesso às {hora_inicio}<br>"
+                                   f"{string_cobranca}<br><br>Cordialmente,<br>Grupo A.",
+                          endereco_email=ciclista.email)
 
         return aluguel
 
@@ -461,7 +478,7 @@ class CiclistaService:
         valor_a_cobrar = AluguelController.calcula_valor_extra(hora_inicial, hora_final)
         string_cobranca = ""
         if valor_a_cobrar > 0:
-            string_cobranca = f"Houve uma cobranca de R${valor_a_cobrar}."
+            string_cobranca = f"Houve uma cobranca adicional de R${valor_a_cobrar}."
             nova_cobranca = self.fazer_cobranca(id_ciclista=aluguel.ciclista_id, valor=valor_a_cobrar)
             if nova_cobranca is None:
                 cobranca_pendente = self.fazer_cobranca_pendente(aluguel.ciclista_id, valor=valor_a_cobrar)
@@ -473,11 +490,10 @@ class CiclistaService:
 
         ciclista = self.recupera_ciclista_por_id(aluguel.ciclista_id)
 
-        self.enviar_email(mensagem=f"Prezado {ciclista.nome},<br><br> Registramos sua devolução às {aluguel.horaFim}."
+        self.enviar_email(mensagem=f"Prezado {ciclista.nome},<br><br> Registramos sua devolução às {aluguel.horaFim}.<br>"
                           f"{string_cobranca}<br><br>Cordialmente,<br>Grupo A.", assunto="Devolução -- Grupo A",
                           endereco_email=ciclista.email)
 
-        # Salva as alterações no banco de dados
         self.db.commit()
         self.db.refresh(aluguel)
 
