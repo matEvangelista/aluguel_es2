@@ -68,6 +68,13 @@ CREATE TABLE IF NOT EXISTS cartao_credito (
     CONSTRAINT Table_2_Cicilista FOREIGN KEY (ciclista_id)
     REFERENCES ciclista (id)
 );
+-- Inserindo os cartões de crédito na tabela cartao_credito
+INSERT INTO cartao_credito (ciclista_id, numero, validade, cvv, nomeTitular)
+VALUES
+(1, '4539620659922097', '2026-12-01', '132', 'Fulano Beltrano'),
+(2, '4539620659922097', '2026-12-01', '132', 'Fulano Beltrano'),
+(3, '4539620659922097', '2026-12-01', '132', 'Fulano Beltrano'),
+(4, '4539620659922097', '2026-12-01', '132', 'Fulano Beltrano');
 
 
 -- Table: funcionario
