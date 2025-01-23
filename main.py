@@ -86,10 +86,7 @@ def ciclista_pode_alugar(idCiclista: int, db: Session = Depends(get_db)):
 @app.get("/ciclista/{idCiclista}/bicicletaAlugada", status_code=200, tags=['Aluguel'], response_model=Bicicleta|None)
 def buscar_bicicleta_alugada_atualmente(idCiclista: int, db: Session = Depends(get_db)):
     ciclista_service = CiclistaService(db)
-    try:
-        resp = ciclista_service.busca_bicicleta_alugada(idCiclista)
-    except Exception:
-        raise HTTPException(status_code=404, detail="Ciclista não encontrado")
+    resp = ciclista_service.busca_bicicleta_alugada(idCiclista)
     return resp
 
 @app.get("/cartaoDeCredito/{idCiclista}", status_code=200, response_model=CartaoCredito, tags=['Aluguel'])
