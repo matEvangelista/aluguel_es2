@@ -1,5 +1,4 @@
 import os
-
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, Body
 from fastapi.openapi.utils import status_code_ranges
@@ -28,7 +27,7 @@ def get_db():
 
 @app.post("/restaurarBanco", status_code=200, tags=["Aluguel"], description="Banco restaurado.")
 def restaurar_banco(db: Session = Depends(get_db)):
-    tabelas = ['ciclista', 'cartao_credito', 'funcionario', 'passaporte']
+    tabelas = ['ciclista', 'cartao_credito', 'funcionario', 'passaporte', 'aluguel']
     for tabela in tabelas:
         string = f'DELETE from {tabela}'
         db.execute(text(string))
@@ -65,8 +64,6 @@ def atualizar_ciclista(idCiclista: int, ciclista: NovoCiclistaPut = Body(...), d
     service = CiclistaService(db, url_externo=URL_EXTERNO)
     dados_atualizados = ciclista.model_dump(exclude_unset=True)  # Só inclui os campos que foram enviados
     ciclista_atualizado = service.atualizar_ciclista(idCiclista, dados_atualizados)
-    if not ciclista_atualizado:
-        raise HTTPException(status_code=404, detail="Ciclista não encontrado.")
     return ciclista_atualizado
 
 @app.post("/ciclista/{idCiclista}/ativar", status_code=200, response_model=Ciclista, tags=["Aluguel"])
@@ -82,10 +79,8 @@ def conferir_email_ja_foi_utilizado(email: EmailStr, db: Session = Depends(get_d
 
 @app.get("/ciclista/{idCiclista}/permiteAluguel", status_code=200, tags=['Aluguel'], response_model=bool)
 def ciclista_pode_alugar(idCiclista: int, db: Session = Depends(get_db)):
-    ciclista_service = CiclistaService(db)
+    ciclista_service = CiclistaService(db, url_externo=URL_EXTERNO, url_equipamento=URL_EQUIPAMENTO)
     resp = ciclista_service.ciclista_pode_alugar(idCiclista)
-    if resp is None:
-        raise HTTPException(status_code=404, detail="Ciclista não encontrado")
     return resp
 
 @app.get("/ciclista/{idCiclista}/bicicletaAlugada", status_code=200, tags=['Aluguel'], response_model=Bicicleta|None)
@@ -107,10 +102,8 @@ def busca_cartao(idCiclista:int, db: Session = Depends(get_db)):
 
 @app.put("/cartaoDeCredito/{idCiclista}", status_code=200, tags=['Aluguel'])
 def editar_cartao(idCiclista:int, cartao: NovoCartaoDeCredito = Body(...), db: Session = Depends(get_db)):
-    ciclista_service = CiclistaService(db)
-    resp = ciclista_service.edita_cartao(idCiclista, cartao)
-    if not resp:
-        raise HTTPException(status_code=404, detail="Ciclista não encontrado.")
+    ciclista_service = CiclistaService(db, url_externo=URL_EXTERNO)
+    ciclista_service.edita_cartao(idCiclista, cartao)
 
 @app.get("/funcionario", status_code=200, tags=['Aluguel'], response_model=List[Funcionario])
 def recupera_funcionarios(db: Session = Depends(get_db)):
@@ -156,12 +149,12 @@ def delete_funcionario(idFuncionario: int, db: Session = Depends(get_db)):
 
 @app.post("/aluguel", status_code=200, response_model=Aluguel, tags=["Aluguel"])
 def realizar_aluguel(ciclista: int = Body(...), trancaInicio: int = Body(...), db: Session = Depends(get_db)):
-    ciclista_service = CiclistaService(db)
+    ciclista_service = CiclistaService(db, url_equipamento=URL_EQUIPAMENTO, url_externo=URL_EXTERNO)
     resultado = ciclista_service.realizar_aluguel(ciclista, trancaInicio)
     return resultado
 
 @app.post("/devolucao", status_code=200, response_model=Devolucao, tags=["Aluguel"])
 def realizar_devolucao(idTranca: int = Body(...), idBicicleta: int = Body(...), db: Session = Depends(get_db)):
-    ciclista_service = CiclistaService(db)
+    ciclista_service = CiclistaService(db, url_externo=URL_EXTERNO, url_equipamento=URL_EQUIPAMENTO)
     resp = ciclista_service.realizar_devolucao(idBicicleta, idTranca)
     return resp
