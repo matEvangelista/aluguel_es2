@@ -210,17 +210,22 @@ class CiclistaService:
         if ciclista.nacionalidade == 'ESTRANGEIRO' and ciclista.passaporte is None:
             raise HTTPException(422, "Estrangeiro sem Passaporte")
 
-        if "passaporte" in dados_ciclista:
-            passaporte_dados = dados_ciclista["passaporte"]
-            if ciclista.passaporte:
-                for key, value in passaporte_dados.items():
-                    if hasattr(ciclista.passaporte, key):
-                        setattr(ciclista.passaporte, key, value)
+        if "passaporte" in dados_ciclista.keys():
+            if dados_ciclista['passaporte'] is not None:
+                passaporte_dados = dados_ciclista["passaporte"]
+                if ciclista.passaporte:
+                    for key, value in passaporte_dados.items():
+                        if hasattr(ciclista.passaporte, key):
+                            setattr(ciclista.passaporte, key, value)
+                else:
+                    passaporte = Passaporte(**passaporte_dados, ciclista_id=ciclista.id)
+                    self.db.add(passaporte)
+                    ciclista.passaporte = passaporte
             else:
-                passaporte = Passaporte(**passaporte_dados, ciclista_id=ciclista.id)
-                self.db.add(passaporte)
-                ciclista.passaporte = passaporte
-
+                passaporte = ciclista.passaporte
+                self.db.delete(passaporte)
+                self.db.commit()
+                ciclista.passaporte = None
 
         self.db.commit()
         self.db.refresh(ciclista)
@@ -331,6 +336,8 @@ class CiclistaService:
             .filter(AluguelDB.ciclista_id == id_ciclista, AluguelDB.horaFim.is_(None))
             .first()
         )
+        if aluguel is None:
+            return None
         bicicleta_id = aluguel.bicicleta
 
         bicicleta = self.busca_bicicleta_por_id(id_bicicleta=bicicleta_id)
