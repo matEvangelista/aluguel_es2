@@ -13,7 +13,7 @@ class Ciclista(Base):
     nacionalidade = Column(String, nullable=False)
     nascimento = Column(Date, nullable=False)
     senha = Column(String, nullable=False)
-    status = Column(String, default="INATIVO", nullable=False)
+    status = Column(String, default="AGUARDANDO_CONFIRMACAO", nullable=False)
     cpf = Column(String, nullable=True)
     urlFotoDocumento = Column(String, nullable=True)
 

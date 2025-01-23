@@ -1,8 +1,12 @@
-pydantic
-sqlalchemy
+pydantic~=2.10.5
+sqlalchemy~=2.0.37
 pycountry
 pycountrycode
-fastapi
+fastapi~=0.115.6
 uvicorn
-pydantic-extra-types
+pydantic-extra-types~=2.10.2
 email_validator
+
+requests~=2.32.3
+python-dotenv~=1.0.1
+starlette~=0.41.3
