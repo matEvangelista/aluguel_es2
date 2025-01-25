@@ -50,7 +50,7 @@ class CiclistaService:
         resp = requests.get(url, headers=headers)
         if resp.status_code != 200:
             return None
-        return resp.json()
+        return resp.json()['tranca']
 
     def busca_bicicleta(self, id_tranca: int):
         url = self.url_equipamento + f"/tranca/{id_tranca}/bicicleta"
@@ -58,7 +58,7 @@ class CiclistaService:
         resp = requests.get(url, headers=headers)
         if resp.status_code != 200:
             return None
-        return resp.json()
+        return resp.json()['bicicleta']
 
     def busca_bicicleta_por_id(self, id_bicicleta):
         url = self.url_equipamento + f"/bicicleta/{id_bicicleta}"
@@ -66,7 +66,7 @@ class CiclistaService:
         resp = requests.get(url, headers=headers)
         if resp.status_code != 200:
             return None
-        return resp.json()
+        return resp.json()['bicicleta']
 
     def bicicleta_em_uso(self, id_bicleta: int):
         url = self.url_equipamento + f"/bicicleta/{id_bicleta}"
@@ -74,7 +74,7 @@ class CiclistaService:
         resp = requests.get(url, headers=headers)
         if resp.status_code != 200:
             return False
-        return resp.json()['status']=='EM_USO'
+        return resp.json()['bicicleta']['status']=='EM_USO'
 
     def destranca(self, id_tranca, id_bicicleta):
         url = self.url_equipamento + f"/tranca/{id_tranca}/destrancar"
@@ -87,7 +87,7 @@ class CiclistaService:
         response = requests.post(url, json=corpo, headers=headers)
         if response.status_code != 200:
             return None
-        return response.json()
+        return response.json()['tranca']
 
     def tranca(self, id_tranca, id_bicicleta):
         url = self.url_equipamento + f"/tranca/{id_tranca}/trancar"
@@ -100,7 +100,7 @@ class CiclistaService:
         response = requests.post(url, json=corpo, headers=headers)
         if response.status_code != 200:
             return None
-        return response.json()
+        return response.json()['tranca']
 
     def fazer_cobranca(self, id_ciclista, valor):
         url = self.url_externo + "/cobranca"
